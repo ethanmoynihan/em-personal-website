@@ -10,11 +10,11 @@ cp .env.local.example .env.local   # leave the placeholders for now
 npm run dev
 ```
 
-The site runs at http://localhost:3000. Without real Supabase creds, queries will fail and the gallery will be empty — that's fine for checking the layout and theme.
+The site runs at [http://localhost:3000](http://localhost:3000). Without real Supabase creds, queries will fail and the gallery will be empty — that's fine for checking the layout and theme.
 
 ## 2. Create a Supabase project
 
-1. Sign up at https://supabase.com (free tier is plenty)
+1. Sign up at [https://supabase.com](https://supabase.com) (free tier is plenty)
 2. New project → name it, set a strong database password, pick a region
 3. Wait for it to provision (~1 min)
 
@@ -89,6 +89,7 @@ create policy "authenticated full access artworks"
 ## 4. Create the storage bucket
 
 In Supabase → **Storage** → New bucket:
+
 - Name: `artworks`
 - Public bucket: **yes** (so images load without signed URLs)
 
@@ -113,6 +114,7 @@ create policy "authenticated write artworks bucket"
 ## 5. Create your admin user
 
 In Supabase → **Authentication** → **Users** → **Add user** → **Create new user**:
+
 - Email: your email
 - Password: a strong one
 - **Auto-confirm user**: yes
@@ -122,6 +124,7 @@ This is the only account that will be able to upload. The site doesn't expose a 
 ## 6. Copy env vars into `.env.local`
 
 In Supabase → **Project Settings** → **API**, copy:
+
 - Project URL → `NEXT_PUBLIC_SUPABASE_URL`
 - `anon` public key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 
@@ -129,7 +132,7 @@ Restart `npm run dev` so the new env vars are picked up.
 
 ## 7. Try it locally
 
-1. Visit http://localhost:3000/admin/login
+1. Visit [http://localhost:3000/admin/login](http://localhost:3000/admin/login)
 2. Sign in with the user you just created
 3. Upload your first painting
 4. (Optional) Create a series at `/admin/series`, then re-upload or edit a piece to assign it
@@ -138,7 +141,7 @@ Restart `npm run dev` so the new env vars are picked up.
 ## 8. Deploy to Vercel
 
 1. Push the repo to GitHub (already done — repo is `ethanmoynihan/em-personal-website`)
-2. https://vercel.com → New Project → import the repo
+2. [https://vercel.com](https://vercel.com) → New Project → import the repo
 3. Framework preset: Next.js (auto-detected)
 4. **Environment variables**: add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` (same values as `.env.local`)
 5. Deploy

@@ -32,52 +32,43 @@ async function requireUser() {
   return supabase;
 }
 
-export async function createArtwork(formData: FormData) {
+export async function createArtworkRecord(input: {
+  title: string;
+  description: string | null;
+  medium: string | null;
+  year: number | null;
+  series_id: string | null;
+  image_path: string;
+  width_px: number | null;
+  height_px: number | null;
+}) {
   const supabase = await requireUser();
 
-  const file = formData.get("image") as File | null;
-  if (!file || file.size === 0) {
-    throw new Error("No image provided");
-  }
+  if (!input.title.trim()) throw new Error("Title required");
+  if (!input.image_path) throw new Error("Image path required");
 
-  const title = String(formData.get("title") ?? "").trim();
-  if (!title) throw new Error("Title required");
-
-  const description = String(formData.get("description") ?? "").trim() || null;
-  const medium = String(formData.get("medium") ?? "").trim() || null;
-  const yearStr = String(formData.get("year") ?? "").trim();
-  const year = yearStr ? Number(yearStr) : null;
-  const seriesId = String(formData.get("series_id") ?? "") || null;
-  const widthPx = Number(formData.get("width_px") ?? 0) || null;
-  const heightPx = Number(formData.get("height_px") ?? 0) || null;
-
-  const ext = (file.name.split(".").pop() ?? "jpg").toLowerCase();
-  const path = `${crypto.randomUUID()}.${ext}`;
-
-  const { error: uploadError } = await supabase.storage
-    .from(ARTWORKS_BUCKET)
-    .upload(path, file, {
-      contentType: file.type || `image/${ext}`,
-      cacheControl: "31536000",
-    });
-  if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
-
-  const { error: insertError } = await supabase.from("artworks").insert({
-    title,
-    description,
-    medium,
-    year,
-    series_id: seriesId,
-    image_path: path,
-    width_px: widthPx,
-    height_px: heightPx,
+  const { error } = await supabase.from("artworks").insert({
+    title: input.title.trim(),
+    description: input.description,
+    medium: input.medium,
+    year: input.year,
+    series_id: input.series_id,
+    image_path: input.image_path,
+    width_px: input.width_px,
+    height_px: input.height_px,
   });
-  if (insertError) throw new Error(`Insert failed: ${insertError.message}`);
+  if (error) throw new Error(`Insert failed: ${error.message}`);
 
   revalidatePath("/admin");
   revalidatePath("/gallery");
   revalidatePath("/");
-  if (seriesId) revalidatePath(`/series`);
+  if (input.series_id) revalidatePath(`/series`);
+}
+
+// Used to clean up an uploaded file when the DB insert fails after the upload.
+export async function deleteArtworkFile(path: string) {
+  const supabase = await requireUser();
+  await supabase.storage.from(ARTWORKS_BUCKET).remove([path]);
 }
 
 export async function togglePublishArtwork(id: string, isPublished: boolean) {

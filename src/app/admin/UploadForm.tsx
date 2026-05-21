@@ -1,13 +1,16 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { createArtwork } from "./actions";
+import { createArtworkRecord, deleteArtworkFile } from "./actions";
+import { createClient } from "@/lib/supabase/client";
+import { ARTWORKS_BUCKET } from "@/lib/supabase/storage";
 import type { Series } from "@/lib/supabase/types";
 
 type Preview = {
   url: string;
   width: number;
   height: number;
+  file: File;
 };
 
 export function UploadForm({ series }: { series: Pick<Series, "id" | "title">[] }) {
@@ -15,6 +18,7 @@ export function UploadForm({ series }: { series: Pick<Series, "id" | "title">[] 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
 
@@ -23,16 +27,9 @@ export function UploadForm({ series }: { series: Pick<Series, "id" | "title">[] 
     const url = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {
-      setPreview({ url, width: img.naturalWidth, height: img.naturalHeight });
+      setPreview({ url, width: img.naturalWidth, height: img.naturalHeight, file });
     };
     img.src = url;
-
-    // Sync the file into the hidden input so the form submit picks it up.
-    if (fileInputRef.current) {
-      const dt = new DataTransfer();
-      dt.items.add(file);
-      fileInputRef.current.files = dt.files;
-    }
   }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -41,17 +38,56 @@ export function UploadForm({ series }: { series: Pick<Series, "id" | "title">[] 
       setError("Pick an image first");
       return;
     }
+    const form = e.currentTarget;
+    const fd = new FormData(form);
+    const title = String(fd.get("title") ?? "").trim();
+    if (!title) {
+      setError("Title required");
+      return;
+    }
+
     setBusy(true);
     setError(null);
+
+    const file = preview.file;
+    const ext = (file.name.split(".").pop() ?? "jpg").toLowerCase();
+    const path = `${crypto.randomUUID()}.${ext}`;
+    const supabase = createClient();
+
     try {
-      const fd = new FormData(e.currentTarget);
-      fd.set("width_px", String(preview.width));
-      fd.set("height_px", String(preview.height));
-      await createArtwork(fd);
-      formRef.current?.reset();
+      setProgress("Uploading image…");
+      const { error: uploadError } = await supabase.storage
+        .from(ARTWORKS_BUCKET)
+        .upload(path, file, {
+          contentType: file.type || `image/${ext}`,
+          cacheControl: "31536000",
+        });
+      if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
+
+      setProgress("Saving…");
+      try {
+        await createArtworkRecord({
+          title,
+          description: String(fd.get("description") ?? "").trim() || null,
+          medium: String(fd.get("medium") ?? "").trim() || null,
+          year: fd.get("year") ? Number(fd.get("year")) : null,
+          series_id: String(fd.get("series_id") ?? "") || null,
+          image_path: path,
+          width_px: preview.width,
+          height_px: preview.height,
+        });
+      } catch (insertErr) {
+        // Roll back the orphaned file if the DB write fails.
+        await deleteArtworkFile(path).catch(() => {});
+        throw insertErr;
+      }
+
+      form.reset();
       setPreview(null);
+      setProgress(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
+      setProgress(null);
     } finally {
       setBusy(false);
     }
@@ -105,7 +141,6 @@ export function UploadForm({ series }: { series: Pick<Series, "id" | "title">[] 
         <input
           ref={fileInputRef}
           type="file"
-          name="image"
           accept="image/*"
           className="absolute inset-0 cursor-pointer opacity-0"
           onChange={(e) => {
@@ -115,7 +150,8 @@ export function UploadForm({ series }: { series: Pick<Series, "id" | "title">[] 
         />
         {preview && (
           <p className="mt-3 text-xs text-ink/50">
-            {preview.width} × {preview.height} px
+            {preview.width} × {preview.height} px ·{" "}
+            {(preview.file.size / (1024 * 1024)).toFixed(1)} MB
           </p>
         )}
       </div>
@@ -154,6 +190,7 @@ export function UploadForm({ series }: { series: Pick<Series, "id" | "title">[] 
         />
       </label>
 
+      {progress && <p className="mt-4 text-sm text-ink/70">{progress}</p>}
       {error && <p className="mt-4 text-sm text-coral">{error}</p>}
 
       <button
@@ -161,7 +198,7 @@ export function UploadForm({ series }: { series: Pick<Series, "id" | "title">[] 
         disabled={busy}
         className="mt-6 rounded-full bg-ink px-6 py-3 text-sm font-medium text-cream hover:bg-coral transition-colors disabled:opacity-50"
       >
-        {busy ? "Uploading…" : "Publish"}
+        {busy ? "Working…" : "Publish"}
       </button>
     </form>
   );
